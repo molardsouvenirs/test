@@ -80,6 +80,7 @@
             align-items: center;
             border-radius: 4px;
             margin-bottom: 8px;
+            cursor: grab; /* Indicate items are draggable */
         }
 
         ul#todo-list li:last-child {
@@ -89,6 +90,10 @@
         ul#todo-list li.completed span {
             text-decoration: line-through;
             color: #888;
+        }
+
+        ul#todo-list li.dragging {
+            opacity: 0.5;
         }
 
         .delete-btn {
@@ -169,6 +174,8 @@
         const todoList = document.getElementById('todo-list');
         const darkModeToggle = document.getElementById('dark-mode-toggle');
 
+        let draggedItem = null; // To keep track of the item being dragged
+
         // Load todos from local storage
         loadTodos();
 
@@ -180,12 +187,14 @@
         });
         darkModeToggle.addEventListener('click', toggleDarkMode);
 
+        todoList.addEventListener('dragover', handleDragOver);
+        todoList.addEventListener('drop', handleDrop);
+
         // Check for saved dark mode preference
         if (localStorage.getItem('darkMode') === 'enabled') {
             document.body.classList.add('dark-mode');
             darkModeToggle.textContent = "Toggle Light Mode";
         }
-
 
         function addTodo() {
             const todoText = todoInput.value.trim();
@@ -195,6 +204,9 @@
             }
 
             const listItem = document.createElement('li');
+            listItem.draggable = true; // Make it draggable
+            listItem.addEventListener('dragstart', handleDragStart);
+            listItem.addEventListener('dragend', handleDragEnd);
             
             const todoSpan = document.createElement('span');
             todoSpan.textContent = todoText;
@@ -250,6 +262,10 @@
             if (savedTodos) {
                 savedTodos.forEach(todoData => {
                     const listItem = document.createElement('li');
+                    listItem.draggable = true; // Make it draggable
+                    listItem.addEventListener('dragstart', handleDragStart);
+                    listItem.addEventListener('dragend', handleDragEnd);
+
                     if (todoData.completed) {
                         listItem.classList.add('completed');
                     }
@@ -268,6 +284,68 @@
                     todoList.appendChild(listItem);
                 });
             }
+        }
+
+        function handleDragStart(e) {
+            draggedItem = this;
+            // e.dataTransfer.effectAllowed = 'move'; // Not strictly necessary for this simple case
+            // e.dataTransfer.setData('text/html', this.innerHTML); // Also not strictly needed for reordering within the same list
+            
+            // setTimeout is used to allow the browser to paint the original element
+            // before we start manipulating its appearance (like making it semi-transparent)
+            setTimeout(() => {
+                if(draggedItem) draggedItem.classList.add('dragging');
+            }, 0);
+        }
+
+        function handleDragEnd(e) {
+            if(draggedItem) { // Ensure draggedItem still exists
+                draggedItem.classList.remove('dragging');
+            }
+            // No need to set draggedItem to null here, drop will handle it if successful,
+            // or it will be reset on next dragstart.
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault(); // Necessary to allow dropping
+            if (!draggedItem) return; // If no item is being dragged, do nothing
+
+            const afterElement = getDragAfterElement(todoList, e.clientY);
+            // Ensure draggedItem is not null and is actually in the DOM before trying to move it.
+            // This check helps prevent errors if an item was removed during drag or other edge cases.
+            if (draggedItem && todoList.contains(draggedItem)) {
+                if (afterElement == null) {
+                    todoList.appendChild(draggedItem);
+                } else {
+                    todoList.insertBefore(draggedItem, afterElement);
+                }
+            }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault(); 
+            // The re-ordering has been visually handled by handleDragOver.
+            // This function is now mainly for finalization and saving.
+            if (draggedItem) {
+                draggedItem.classList.remove('dragging'); // Clean up class
+                saveTodos(); // Save the new order
+            }
+            draggedItem = null; // Reset draggedItem
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('li:not(.dragging)')];
+
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                // We are looking for the element just below the cursor
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
     </script>
 </body>
